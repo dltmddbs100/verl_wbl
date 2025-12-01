@@ -19,12 +19,12 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict, Callable, Tuple
 
 import requests
 
 DEFAULT_TIMEOUT = 10  # Default compile and run timeout
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 INITIAL_RETRY_DELAY = 1
 API_TIMEOUT = 10
 
@@ -63,6 +63,98 @@ SUPPORTED_LANGUAGES = [
     "racket",
 ]
 
+def fuzzy_equal(actual: str, expected: str, tolerance: float = 1e-6, verbose=False) -> bool:
+    """
+    Compare two outputs line by line and element by element for approximate equality.
+    Handles:
+    1. Integer and floating-point number comparison with tolerance
+    2. Case-insensitive comparison for yes/no
+
+    Args:
+        actual: The actual output from code execution
+        expected: The expected output
+        tolerance: Tolerance for floating point number comparison
+
+    Returns:
+        bool: True if outputs are approximately equal
+    """
+    # Save original values for debugging
+    original_actual = actual
+    original_expected = expected
+
+    # Normalize line endings
+    actual = actual.strip().replace("\r\n", "\n")
+    expected = expected.strip().replace("\r\n", "\n")
+
+    # If exact match after normalization, return early
+    if actual == expected:
+        return True
+
+    # Split into lines
+    actual_lines = actual.split("\n")
+    expected_lines = expected.split("\n")
+
+    # If different number of lines, they're definitely not equal
+    if len(actual_lines) != len(expected_lines):
+        return False
+
+    # Track fuzzy matches for debugging
+    fuzzy_match_reasons = []
+
+    # Compare each line
+    for i, (actual_line, expected_line) in enumerate(zip(actual_lines, expected_lines)):
+        # If lines match exactly, continue
+        if actual_line == expected_line:
+            continue
+
+        # Split into tokens by whitespace
+        actual_tokens = actual_line.split()
+        expected_tokens = expected_line.split()
+
+        # If different number of tokens, they're not equal
+        if len(actual_tokens) != len(expected_tokens):
+            return False
+
+        # Compare each token
+        for j, (actual_token, expected_token) in enumerate(zip(actual_tokens, expected_tokens)):
+            # If tokens match exactly, continue
+            if actual_token == expected_token:
+                continue
+
+            # For yes/no, use case-insensitive comparison
+            if actual_token.lower() in ["yes", "no"] and expected_token.lower() in ["yes", "no"]:
+                if actual_token.lower() == expected_token.lower():
+                    fuzzy_match_reasons.append(f"Line {i + 1}, Token {j + 1}: Case-insensitive yes/no match '{actual_token}' ≈ '{expected_token}'")
+                    continue
+                else:
+                    return False
+
+            # Try numeric comparison
+            try:
+                actual_num = float(actual_token)
+                expected_num = float(expected_token)
+                diff = abs(actual_num - expected_num)
+
+                if diff <= tolerance:
+                    fuzzy_match_reasons.append(f"Line {i + 1}, Token {j + 1}: Numeric match '{actual_token}' ≈ '{expected_token}' (diff: {diff})")
+                    continue
+                else:
+                    return False
+            except ValueError:
+                # Not numeric values
+                return False
+
+    # Output fuzzy match information if any occurred
+    if fuzzy_match_reasons and verbose:
+        print("😅 FUZZY MATCH - Outputs approximately equal:")
+        print(f"  Expected: {repr(original_expected)}")
+        print(f"  Actual:   {repr(original_actual)}")
+        print("  Reasons for fuzzy matching:")
+        for reason in fuzzy_match_reasons:
+            print(f"    • {reason}")
+
+    # If we made it here, all lines are approximately equal
+    return True
 
 def call_sandbox_api(
     sandbox_fusion_url: str,
@@ -190,6 +282,8 @@ def _process_single_case(
 
     current_generation_code = generation
 
+    stdin = None if stdin_data is None else str(stdin_data)
+
     if fn_name and language == "python":
         # Wrapper assumes stdin_data is a JSON string for function arguments.
         wrapper_code = f"""
@@ -290,7 +384,6 @@ if __name__ == '__main__':
 """
         current_generation_code = wrapper_code
 
-    stdin = None if stdin_data is None else str(stdin_data)
     try:
         if concurrent_semaphore:
             # logger.debug(f"Case {case_index + 1}: Attempting to acquire semaphore.")
@@ -303,7 +396,7 @@ if __name__ == '__main__':
                     compile_timeout=timeout,
                     run_timeout=timeout,
                     memory_limit_mb=memory_limit_mb,
-                    language=language,
+                    language=language
                 )
             # logger.debug(f"Case {case_index + 1}: Semaphore released.")
         else:
@@ -314,7 +407,7 @@ if __name__ == '__main__':
                 compile_timeout=timeout,
                 run_timeout=timeout,
                 memory_limit_mb=memory_limit_mb,
-                language=language,
+                language=language
             )
     except Exception as e:
         error_msg = f"API Request Exception during check_correctness for case {case_index + 1}: {e}"
@@ -424,7 +517,7 @@ if __name__ == '__main__':
             if run_result and metadata["run_status"] == "Finished":
                 actual_output = metadata["stdout"] if metadata["stdout"] is not None else ""
                 # Note: Output might contain trailing newlines, need normalization
-                if expected_output is None or str(actual_output).rstrip("\n") == str(expected_output).rstrip("\n"):
+                if expected_output is None or str(actual_output).rstrip("\n") == str(expected_output).rstrip("\n") or fuzzy_equal(str(actual_output), str(expected_output)):
                     result_status = True
                     metadata["status"] = "success"
                 else:

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def compute_score(
-    sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, completion, test_cases, continuous=False, timeout=10
+    sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, completion, test_cases, continuous=False, timeout=10, language="python"
 ):
     """
     Computes the code score using the remote sandbox API.
@@ -44,9 +44,14 @@ def compute_score(
         score: Float score (0.0 to 1.0).
         metadata_list: List containing execution metadata for each test case.
     """
+        if '</think>' in completion:
+        completion = completion.split('</think>')[-1]
+    else:
+        return 0.0, [{"error": "Think token not found in completion"}]
+
     solution = completion
-    if "```python" in completion:
-        solution = completion.split("```python")[-1].split("```")[0]
+    if f"```{language}" in completion: 
+        solution = completion.split(f"```{language}")[-1].split("```")[0]
     elif "```" in completion:
         # Handle cases like ```\ncode\n```
         parts = completion.split("```")
@@ -60,6 +65,8 @@ def compute_score(
     else:
         return 0.0, [{"error": "Invalid completion (missing code block)"}]
 
+    solution = solution.replace('if __name__ == "__main__":\n    main()','main()').replace('if __name__ == "__main__":\n    solve()','solve()')
+
     try:
         if not isinstance(test_cases, dict):
             try:
@@ -68,9 +75,12 @@ def compute_score(
                 logger.error(f"Failed to parse test_cases JSON: {e}")
                 return 0.0, [{"error": "Invalid test_cases JSON format"}]
 
+        if 'functional' in test_cases:
+            test_cases['assert_case'] = [test_cases['functional']]
+
         if test_cases is not None and "assert_case" in test_cases and isinstance(test_cases.get("assert_case"), list):
             assert_cases = test_cases.get("assert_case")
-            test_cases.setdefault("inputs", ["" for _ in assert_cases])
+            test_cases.setdefault("inputs", [None for _ in assert_cases])
             test_cases.setdefault("outputs", [None for _ in assert_cases])
         elif not test_cases or "inputs" not in test_cases or "outputs" not in test_cases:
             logger.error("Invalid test_cases structure.")
@@ -87,6 +97,7 @@ def compute_score(
             timeout=timeout,
             concurrent_semaphore=concurrent_semaphore,
             memory_limit_mb=memory_limit_mb,
+            language=language
         )
 
         # Calculate score

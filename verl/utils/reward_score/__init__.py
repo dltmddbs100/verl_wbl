@@ -13,125 +13,150 @@
 # limitations under the License.
 # from . import gsm8k, math, prime_math, prime_code
 
+import json
 from verl.utils.import_utils import deprecated
 
 
 def default_compute_score(
-    data_source,
-    solution_str,
-    ground_truth,
-    extra_info=None,
-    sandbox_fusion_url=None,
-    concurrent_semaphore=None,
-    memory_limit_mb=None,
-    **kwargs,
+	data_source,
+	solution_str,
+	ground_truth,
+	extra_info=None,
+	sandbox_fusion_url=None,
+	concurrent_semaphore=None,
+	memory_limit_mb=None,
+	**kwargs,
 ):
-    """Compute the score for a given solution based on the data source.
+	"""Compute the score for a given solution based on the data source.
 
-    Args:
-        data_source (str): The source dataset identifier which determines the scoring method.
-        solution_str (str): The solution string to be evaluated.
-        ground_truth (str): The ground truth answer for comparison.
-        extra_info (dict, optional): Additional information that might be needed for scoring. Defaults to None.
+	Args:
+		data_source (str): The source dataset identifier which determines the scoring method.
+		solution_str (str): The solution string to be evaluated.
+		ground_truth (str): The ground truth answer for comparison.
+		extra_info (dict, optional): Additional information that might be needed for scoring. Defaults to None.
 
-    Returns:
-        float: The computed score as a floating point number. If the result is a dictionary,
-               it returns the dictionary instead.
+	Returns:
+		float: The computed score as a floating point number. If the result is a dictionary,
+			   it returns the dictionary instead.
 
-    Raises:
-        NotImplementedError: If the reward function is not implemented for the given data source.
-    """
-    if data_source == "openai/gsm8k":
-        # from . import gsm8k
-        from . import math_reward
+	Raises:
+		NotImplementedError: If the reward function is not implemented for the given data source.
+	"""
+	if data_source == "openai/gsm8k":
+		# from . import gsm8k
+		from . import math_reward
 
-        # res = gsm8k.compute_score(solution_str, ground_truth)
-        res = math_reward.compute_score(solution_str, ground_truth)
-    elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"]:
-        from . import math_reward
+		# res = gsm8k.compute_score(solution_str, ground_truth)
+		res = math_reward.compute_score(solution_str, ground_truth)
+	elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"]:
+		from . import math_reward
 
-        res = math_reward.compute_score(solution_str, ground_truth)
-        # [Optional] Math-Verify Integration
-        # For enhanced accuracy, consider utilizing Math-Verify (https://github.com/huggingface/Math-Verify).
-        # Note: Math-Verify needs to be manually installed via pip: `pip install math-verify`.
-        # To use it, override the `compute_score` function with the following implementation:
+		res = math_reward.compute_score(solution_str, ground_truth)
+		# [Optional] Math-Verify Integration
+		# For enhanced accuracy, consider utilizing Math-Verify (https://github.com/huggingface/Math-Verify).
+		# Note: Math-Verify needs to be manually installed via pip: `pip install math-verify`.
+		# To use it, override the `compute_score` function with the following implementation:
 
-        # from . import math_verify
-        # res = math_verify.compute_score(solution_str, ground_truth)
-    elif data_source in ["math_dapo", "math", "math_dapo_reasoning"] or data_source.startswith("aime"):
-        from . import math_dapo
+		# from . import math_verify
+		# res = math_verify.compute_score(solution_str, ground_truth)
+	elif data_source in ["math_dapo", "math", "math_dapo_reasoning"] or data_source.startswith("aime"):
+		from . import math_dapo
 
-        res = math_dapo.compute_score(solution_str, ground_truth)
-    elif data_source in [
-        "numina_aops_forum",
-        "numina_synthetic_math",
-        "numina_amc_aime",
-        "numina_synthetic_amc",
-        "numina_cn_k12",
-        "numina_olympiads",
-    ]:
-        from . import prime_math
+		res = math_dapo.compute_score(solution_str, ground_truth)
+	elif data_source in [
+		"numina_aops_forum",
+		"numina_synthetic_math",
+		"numina_amc_aime",
+		"numina_synthetic_amc",
+		"numina_cn_k12",
+		"numina_olympiads",
+	]:
+		from . import prime_math
 
-        res = prime_math.compute_score(solution_str, ground_truth)
-    elif data_source in ["codecontests", "apps", "codeforces", "taco"]:
-        # Use the passed sandbox_fusion_url if available
-        if sandbox_fusion_url:
-            from . import sandbox_fusion
+		res = prime_math.compute_score(solution_str, ground_truth)
+	# elif data_source in ["codecontests", "apps", "codeforces", "taco"]:
+	elif data_source in [
+		"leetcode_python", 
+		"taco_python", 
+		"primeintellect_python", 
+		"codeforces_cpp", 
+		"bigcodebench", 
+		"livecodebench_v5"
+	]:
+		# Use the passed sandbox_fusion_url if available
+		if sandbox_fusion_url:
+			from . import sandbox_fusion
 
-            # Pass the URL directly, ground_truth likely contains test cases here
-            res = sandbox_fusion.compute_score(
-                sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, solution_str, ground_truth, continuous=True, language=extra_info.get("language", "python")
-            )
-        else:
-            # If no sandbox URL is provided, fall back to prime_code or raise error
-            from . import prime_code
+			language = "python"
+			if extra_info:
+				if isinstance(extra_info, str):
+					try:
+						parsed_info = json.loads(extra_info) # extra_info를 문자열로 정의했기 때문에, json.loads를 사용하여 딕셔너리로 변환
+						language = parsed_info.get("language", "python")
+					except Exception:
+						pass
+				elif isinstance(extra_info, dict):
+					language = extra_info.get("language", "python")
 
-            # Assuming prime_code doesn't need the URL
-            res = prime_code.compute_score(solution_str, ground_truth, continuous=True)
-    elif data_source in ["hiyouga/geometry3k"]:
-        from . import geo3k
+			res = sandbox_fusion.compute_score(
+				sandbox_fusion_url=sandbox_fusion_url, 
+				concurrent_semaphore=concurrent_semaphore, 
+				memory_limit_mb=memory_limit_mb, 
+				completion=solution_str, 
+				test_cases=ground_truth, 
+				continuous=True, 
+				language=language  
+			)
+		else:
+			# If no sandbox URL is provided, fall back to prime_code or raise error
+			from . import prime_code
 
-        res = geo3k.compute_score(solution_str, ground_truth)
-    elif data_source in [
-        "searchR1_nq",
-        "searchR1_triviaqa",
-        "searchR1_popqa",
-        "searchR1_hotpotqa",
-        "searchR1_2wikimultihopqa",
-        "searchR1_musique",
-        "searchR1_bamboogle",
-    ]:
-        from . import search_r1_like_qa_em
+			# Assuming prime_code doesn't need the URL
+			res = prime_code.compute_score(solution_str, ground_truth, continuous=True)
+	elif data_source in ["hiyouga/geometry3k"]:
+		from . import geo3k
 
-        res = search_r1_like_qa_em.compute_score(solution_str, ground_truth)
+		res = geo3k.compute_score(solution_str, ground_truth)
+	elif data_source in [
+		"searchR1_nq",
+		"searchR1_triviaqa",
+		"searchR1_popqa",
+		"searchR1_hotpotqa",
+		"searchR1_2wikimultihopqa",
+		"searchR1_musique",
+		"searchR1_bamboogle",
+	]:
+		from . import search_r1_like_qa_em
 
-    else:
-        raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
+		res = search_r1_like_qa_em.compute_score(solution_str, ground_truth)
 
-    if isinstance(res, dict):
-        return res
-    elif isinstance(res, int | float | bool):
-        return float(res)
-    else:
-        return float(res[0])
+	else:
+		raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
+
+	if isinstance(res, dict):
+		return res
+	elif isinstance(res, int | float | bool):
+		return float(res)
+	else:
+		return float(res[0])
 
 
 @deprecated("verl.utils.reward_score.default_compute_score")
 def _default_compute_score(
-    data_source,
-    solution_str,
-    ground_truth,
-    extra_info=None,
-    sandbox_fusion_url=None,
-    concurrent_semaphore=None,
-    memory_limit_mb=None,
+	data_source,
+	solution_str,
+	ground_truth,
+	extra_info=None,
+	sandbox_fusion_url=None,
+	concurrent_semaphore=None,
+	memory_limit_mb=None,
 ):
-    """
-    Legacy function API to be deprecated. Please use `default_compute_score` instead.
-    """
-    return default_compute_score(
-        data_source, solution_str, ground_truth, extra_info, sandbox_fusion_url, concurrent_semaphore, memory_limit_mb
-    )
+	"""
+	Legacy function API to be deprecated. Please use `default_compute_score` instead.
+	"""
+	return default_compute_score(
+		data_source, solution_str, ground_truth, extra_info, sandbox_fusion_url, concurrent_semaphore, memory_limit_mb
+	)
 
 
 __all__ = ["default_compute_score"]

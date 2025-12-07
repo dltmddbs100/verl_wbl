@@ -33,7 +33,7 @@ def default_compute_score(
 		data_source (str): The source dataset identifier which determines the scoring method.
 		solution_str (str): The solution string to be evaluated.
 		ground_truth (str): The ground truth answer for comparison.
-		extra_info (dict, optional): Additional information that might be needed for scoring. Defaults to None.
+		extra_info (str, optional): Additional information that might be needed for scoring. Defaults to None.
 
 	Returns:
 		float: The computed score as a floating point number. If the result is a dictionary,
@@ -89,12 +89,19 @@ def default_compute_score(
 
 			language = "python"
 			if extra_info:
+				# extra_info를 문자열로 정의했기 때문에, json.loads를 사용하여 딕셔너리로 변환
 				if isinstance(extra_info, str):
 					try:
-						parsed_info = json.loads(extra_info) # extra_info를 문자열로 정의했기 때문에, json.loads를 사용하여 딕셔너리로 변환
-						language = parsed_info.get("language", "python")
+						parsed_info = json.loads(extra_info)
+						language = parsed_info.get("language", "python") 
 					except Exception:
-						pass
+						try:
+							import ast
+							parsed_info = ast.literal_eval(extra_info)
+							if isinstance(parsed_info, dict):
+								language = parsed_info.get("language", "python")
+						except Exception:
+							pass
 				elif isinstance(extra_info, dict):
 					language = extra_info.get("language", "python")
 

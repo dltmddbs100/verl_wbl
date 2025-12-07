@@ -62,12 +62,6 @@ def compute_score(
 				first_line, rest = solution.split("\n", 1)
 				if first_line.strip().isalpha():  # Simple check for language name
 					solution = rest
-					
-	# Python: 메인 함수 실행 방지 처리 (일반적인 스크립트형 문제 대비)
-	if language == "python":
-		solution = solution.replace('if __name__ == "__main__":\n    main()', 'main()')
-		solution = solution.replace('if __name__ == "__main__":\n    solve()', 'solve()')
-
 	else:
 		return 0.0, [{"error": "Invalid completion (missing code block)"}]
 

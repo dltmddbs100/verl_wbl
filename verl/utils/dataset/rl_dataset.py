@@ -18,6 +18,7 @@ import copy
 import logging
 import os
 import re
+import json
 import traceback
 from collections import defaultdict
 from typing import Optional
@@ -441,6 +442,15 @@ class RLHFDataset(Dataset):
         # add index for each prompt
         if "extra_info" not in row_dict or row_dict["extra_info"] is None:
             row_dict["extra_info"] = dict()
+        elif not isinstance(row_dict["extra_info"], dict):
+            try:
+                row_dict["extra_info"] = json.loads(row_dict["extra_info"])
+            except Exception:
+                try:
+                    import ast
+                    row_dict["extra_info"] = ast.literal_eval(row_dict["extra_info"])
+                except Exception:
+                    row_dict["extra_info"] = dict()
         index = row_dict.get("extra_info", {}).get("index", 0)
         tools_kwargs = row_dict.get("extra_info", {}).get("tools_kwargs", {})
         interaction_kwargs = row_dict.get("extra_info", {}).get("interaction_kwargs", {})
